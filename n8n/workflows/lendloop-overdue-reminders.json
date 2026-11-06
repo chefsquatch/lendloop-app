@@ -1,0 +1,202 @@
+{
+  "id": "LLoverdueRemind1",
+  "name": "LendLoop 2: daily overdue reminders",
+  "nodes": [
+    {
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Daily 08:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Run now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Sign overdue query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ---- shared HMAC helpers (prepended to every Code node by n8n/build-workflows.mjs) ----\n// Same scheme as convex/lib/hmac.ts: hex HMAC-SHA256 over `${unixSeconds}.${rawBody}`,\n// 300 s replay window, constant-time compare. The secret comes from the container env\n// (n8n/.env), never from this file or the exported workflow JSON.\nconst crypto = require(\"crypto\");\nconst LENDLOOP_MAX_SKEW_SECONDS = 300;\n\nfunction lendloopSecret() {\n  const s = $env.N8N_SIGNING_SECRET;\n  if (!s) throw new Error(\"N8N_SIGNING_SECRET is not set in the n8n container env\");\n  return s;\n}\n\nfunction lendloopSign(ts, rawBody) {\n  return crypto.createHmac(\"sha256\", lendloopSecret()).update(`${ts}.${rawBody}`).digest(\"hex\");\n}\n\nfunction lendloopVerify(rawBody, tsHeader, sigHeader, nowSeconds = Math.floor(Date.now() / 1000)) {\n  if (!tsHeader || !sigHeader) return { ok: false, reason: \"missing headers\" };\n  const ts = Number(tsHeader);\n  if (!Number.isInteger(ts)) return { ok: false, reason: \"bad timestamp\" };\n  if (Math.abs(nowSeconds - ts) > LENDLOOP_MAX_SKEW_SECONDS) return { ok: false, reason: \"stale timestamp\" };\n  const expected = Buffer.from(lendloopSign(ts, rawBody), \"utf8\");\n  const given = Buffer.from(String(sigHeader).trim().toLowerCase(), \"utf8\");\n  if (expected.length !== given.length) return { ok: false, reason: \"bad signature\" };\n  return crypto.timingSafeEqual(expected, given) ? { ok: true } : { ok: false, reason: \"bad signature\" };\n}\n\n/** Headers + exact body for a signed POST to Convex; the HTTP Request node sends `body` raw. */\nfunction lendloopSignedRequest(path, payload) {\n  const body = JSON.stringify(payload);\n  const ts = Math.floor(Date.now() / 1000);\n  const base = ($env.LENDLOOP_CONVEX_SITE_URL || \"\").replace(/\\/+$/, \"\");\n  if (!base) throw new Error(\"LENDLOOP_CONVEX_SITE_URL is not set in the n8n container env\");\n  return { url: `${base}${path}`, body, timestamp: String(ts), signature: lendloopSign(ts, body) };\n}\n// ---- end shared helpers ----\n\n// Workflow 2, step 1: build the signed request for Convex's overdue-loans endpoint.\n// POST with a body (not GET) so there is something to sign; `{}` = \"today\" by Convex's clock.\nreturn [{ json: lendloopSignedRequest(\"/n8n/overdue-loans\", {}) }];\n"
+      }
+    },
+    {
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Fetch overdue loans (Convex)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-lendloop-timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "x-lendloop-signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Remind borrowers (logged mock) + sign write-back",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ---- shared HMAC helpers (prepended to every Code node by n8n/build-workflows.mjs) ----\n// Same scheme as convex/lib/hmac.ts: hex HMAC-SHA256 over `${unixSeconds}.${rawBody}`,\n// 300 s replay window, constant-time compare. The secret comes from the container env\n// (n8n/.env), never from this file or the exported workflow JSON.\nconst crypto = require(\"crypto\");\nconst LENDLOOP_MAX_SKEW_SECONDS = 300;\n\nfunction lendloopSecret() {\n  const s = $env.N8N_SIGNING_SECRET;\n  if (!s) throw new Error(\"N8N_SIGNING_SECRET is not set in the n8n container env\");\n  return s;\n}\n\nfunction lendloopSign(ts, rawBody) {\n  return crypto.createHmac(\"sha256\", lendloopSecret()).update(`${ts}.${rawBody}`).digest(\"hex\");\n}\n\nfunction lendloopVerify(rawBody, tsHeader, sigHeader, nowSeconds = Math.floor(Date.now() / 1000)) {\n  if (!tsHeader || !sigHeader) return { ok: false, reason: \"missing headers\" };\n  const ts = Number(tsHeader);\n  if (!Number.isInteger(ts)) return { ok: false, reason: \"bad timestamp\" };\n  if (Math.abs(nowSeconds - ts) > LENDLOOP_MAX_SKEW_SECONDS) return { ok: false, reason: \"stale timestamp\" };\n  const expected = Buffer.from(lendloopSign(ts, rawBody), \"utf8\");\n  const given = Buffer.from(String(sigHeader).trim().toLowerCase(), \"utf8\");\n  if (expected.length !== given.length) return { ok: false, reason: \"bad signature\" };\n  return crypto.timingSafeEqual(expected, given) ? { ok: true } : { ok: false, reason: \"bad signature\" };\n}\n\n/** Headers + exact body for a signed POST to Convex; the HTTP Request node sends `body` raw. */\nfunction lendloopSignedRequest(path, payload) {\n  const body = JSON.stringify(payload);\n  const ts = Math.floor(Date.now() / 1000);\n  const base = ($env.LENDLOOP_CONVEX_SITE_URL || \"\").replace(/\\/+$/, \"\");\n  if (!base) throw new Error(\"LENDLOOP_CONVEX_SITE_URL is not set in the n8n container env\");\n  return { url: `${base}${path}`, body, timestamp: String(ts), signature: lendloopSign(ts, body) };\n}\n// ---- end shared helpers ----\n\n// Workflow 2, step 2: one reminder per overdue loan (logged mock; swap for Send Email),\n// then build the signed write-back. Convex makes the write-back idempotent on reminderKey\n// (one per loan per day), so a retried request never creates a second record.\nconst response = $input.first().json;\nconst loans = Array.isArray(response.loans) ? response.loans : [];\n\nreturn loans.map((loan) => {\n  let status = \"sent\";\n  let detail;\n  try {\n    const subject = `Reminder: the ${loan.toolName} was due back on ${loan.endDate}`;\n    console.log(`[lendloop] remind ${loan.reminderKey} -> ${loan.borrower.email}: ${subject}`);\n  } catch (e) {\n    status = \"failed\";\n    detail = String(e && e.message ? e.message : e).slice(0, 300);\n  }\n  const writeBack = { loanId: loan.loanId, reminderKey: loan.reminderKey, status };\n  if (detail) writeBack.detail = detail;\n  return { json: { reminderKey: loan.reminderKey, ...lendloopSignedRequest(\"/n8n/reminder-status\", writeBack) } };\n});\n"
+      }
+    },
+    {
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Write reminder status (Convex)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-lendloop-timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "x-lendloop-signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 08:00 UTC": {
+      "main": [
+        [
+          {
+            "node": "Sign overdue query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now (manual)": {
+      "main": [
+        [
+          {
+            "node": "Sign overdue query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign overdue query": {
+      "main": [
+        [
+          {
+            "node": "Fetch overdue loans (Convex)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch overdue loans (Convex)": {
+      "main": [
+        [
+          {
+            "node": "Remind borrowers (logged mock) + sign write-back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remind borrowers (logged mock) + sign write-back": {
+      "main": [
+        [
+          {
+            "node": "Write reminder status (Convex)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "errorWorkflow": "LLerrorHandler01"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

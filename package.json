@@ -1,0 +1,43 @@
+{
+  "name": "lendloop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:frontend dev:backend",
+    "dev:frontend": "next dev",
+    "dev:backend": "convex dev",
+    "predev": "convex dev --until-success && convex dashboard",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "n8n:build": "node n8n/build-workflows.mjs",
+    "n8n:up": "docker compose -f n8n/docker-compose.yml up -d",
+    "n8n:import": "docker compose -f n8n/docker-compose.yml exec n8n sh -c \"n8n import:workflow --separate --input=/workflows && n8n publish:workflow --id=LLerrorHandler01 && n8n publish:workflow --id=LLloanEvents0001 && n8n publish:workflow --id=LLoverdueRemind1\" && docker compose -f n8n/docker-compose.yml restart n8n"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.25.0",
+    "@clerk/nextjs": "^6.12.6",
+    "convex": "^1.23.0",
+    "next": "^15.5.8",
+    "react": "^19.2.2",
+    "react-dom": "^19.2.2"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "convex-test": "^0.0.67",
+    "eslint": "^9",
+    "eslint-config-next": "15.2.3",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.5.3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,33 @@
+# Self-hosted n8n for LendLoop's two workflows (+ the error workflow).
+#
+#   cp n8n/.env.example n8n/.env   # then set N8N_SIGNING_SECRET (same value as the Convex env)
+#   docker compose -f n8n/docker-compose.yml up -d
+#   npm run n8n:import             # imports + activates the three workflows in n8n/workflows/
+#
+# Secrets come from n8n/.env (gitignored) at runtime; the exported workflow JSON holds none.
+services:
+  n8n:
+    image: n8nio/n8n:2.46.6 # pinned; bump deliberately
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678" # loopback only; put a TLS reverse proxy in front for production
+    env_file: .env
+    environment:
+      GENERIC_TIMEZONE: UTC
+      TZ: UTC
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # Code nodes read exactly two env vars (the HMAC secret and the Convex URL). n8n 2.x
+      # blocks $env by default; we opt in rather than paste the secret into workflow JSON.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      # Keep execution history short: it contains recipient emails (data minimization).
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168" # hours
+      # Convex dev backend runs on the host; from the container it is host.docker.internal.
+      LENDLOOP_CONVEX_SITE_URL: ${LENDLOOP_CONVEX_SITE_URL:-http://host.docker.internal:3211}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/home/node/.n8n
+      - ./workflows:/workflows:ro

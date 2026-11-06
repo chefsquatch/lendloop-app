@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Design tokens: one accent, quiet neutrals, a surface a step above the page. */
+:root {
+  --background: #f6f7f5;
+  --surface: #ffffff;
+  --foreground: #1b1f1d;
+  --muted: #5d6863;
+  --border: #e1e6e3;
+  --accent: #1f7a5c;
+  --accent-hover: #186148;
+  --accent-fg: #ffffff;
+  --accent-soft: #e5f2ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0e1110;
+    --surface: #161a18;
+    --foreground: #e7ebe9;
+    --muted: #98a39e;
+    --border: #29302c;
+    --accent: #4dbb8b;
+    --accent-hover: #6ccaa1;
+    --accent-fg: #0a1310;
+    --accent-soft: #15261e;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-toast-in {
+    animation: toast-in 160ms ease-out;
+  }
+}

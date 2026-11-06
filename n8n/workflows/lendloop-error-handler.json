@@ -1,0 +1,50 @@
+{
+  "id": "LLerrorHandler01",
+  "name": "LendLoop: error handler",
+  "nodes": [
+    {
+      "id": "c3000000-0000-4000-8000-000000000001",
+      "name": "On workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c3000000-0000-4000-8000-000000000002",
+      "name": "Log failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Error workflow: any failed LendLoop execution (after its node-level retries) lands here.\n// Logged loudly so the failure is visible in `docker compose logs n8n` and in this\n// workflow's execution list; swap for a Slack/email alert in production. No payload data\n// is copied here, only where it failed.\nconst e = $input.first().json;\nconst failure = {\n  workflow: e.workflow && e.workflow.name,\n  executionId: e.execution && e.execution.id,\n  executionUrl: e.execution && e.execution.url,\n  node: e.execution && e.execution.lastNodeExecuted,\n  message: e.execution && e.execution.error && e.execution.error.message,\n  at: new Date().toISOString(),\n};\nconsole.error(`[lendloop] WORKFLOW FAILED ${JSON.stringify(failure)}`);\nreturn [{ json: failure }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "On workflow error": {
+      "main": [
+        [
+          {
+            "node": "Log failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
